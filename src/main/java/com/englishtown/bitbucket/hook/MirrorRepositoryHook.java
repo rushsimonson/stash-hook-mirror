@@ -10,10 +10,12 @@ import com.atlassian.bitbucket.scm.CommandExitHandler;
 import com.atlassian.bitbucket.scm.DefaultCommandExitHandler;
 import com.atlassian.bitbucket.scm.ScmCommandBuilder;
 import com.atlassian.bitbucket.scm.ScmService;
+import com.atlassian.bitbucket.scm.git.command.GitCommand;
 import com.atlassian.bitbucket.scm.git.command.GitScmCommandBuilder;
 import com.atlassian.bitbucket.setting.RepositorySettingsValidator;
 import com.atlassian.bitbucket.setting.Settings;
 import com.atlassian.bitbucket.setting.SettingsValidationErrors;
+import com.atlassian.bitbucket.scm.Command;
 import com.atlassian.sal.api.pluginsettings.PluginSettings;
 import com.atlassian.sal.api.pluginsettings.PluginSettingsFactory;
 import org.slf4j.Logger;
@@ -41,6 +43,8 @@ public class MirrorRepositoryHook implements AsyncPostReceiveRepositoryHook, Rep
     static final String SETTING_USERNAME = "username";
     static final String SETTING_PASSWORD = "password";
     static final int MAX_ATTEMPTS = 5;
+    static final int MAX_EXECUTION_TIME = 3600;
+    static final int MAX_IDLE_TIME = 3600;
 
     private final ScmService scmService;
     private final I18nService i18nService;
@@ -129,7 +133,7 @@ public class MirrorRepositoryHook implements AsyncPostReceiveRepositoryHook, Rep
 
                         // Call push command with the prune flag and refspecs for heads and tags
                         // Do not use the mirror flag as pull-request refs are included
-                        String result = builder
+                        GitCommand<String> push = builder
                                 .command("push")
                                 .argument("--prune") // this deletes locally deleted branches
                                 .argument(authenticatedUrl)
@@ -139,8 +143,10 @@ public class MirrorRepositoryHook implements AsyncPostReceiveRepositoryHook, Rep
                                 .argument("+refs/notes/*:refs/notes/*") // and notes
                                 .errorHandler(passwordHandler)
                                 .exitHandler(passwordHandler)
-                                .build(passwordHandler)
-                                .call();
+                                .build(passwordHandler);
+                        push.setExecutionTimeout(MAX_EXECUTION_TIME);
+                        push.setIdleTimeout(MAX_IDLE_TIME);
+                        String result = push.call();
 
                         logger.debug("MirrorRepositoryHook: postReceive completed with result '{}'.", result);
 
